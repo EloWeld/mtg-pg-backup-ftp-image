@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/sh
+
+echo "Starting backup process..."
 
 # Variables
 BACKUP_DIR="/backups"
@@ -12,6 +14,7 @@ mkdir -p $BACKUP_DIR
 export PGPASSWORD=$POSTGRES_PASSWORD
 
 # Perform the backup
+echo "Creating backup file..."
 pg_dump -U $POSTGRES_USER -h $POSTGRES_HOST -F p -b -v -f $BACKUP_FILE $POSTGRES_DB
 
 # Check if the backup was successful

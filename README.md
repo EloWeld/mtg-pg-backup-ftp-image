@@ -108,3 +108,15 @@ networks:
 ## Customizing the Cron Schedule
 The CRON_SCHEDULE environment variable allows you to specify a custom cron schedule. For example, to run the backup every day at 3 AM, set CRON_SCHEDULE to 0 3 * * *. If CRON_SCHEDULE is not set, the default schedule is daily at 2 AM (0 2 * * *).
 
+## Manual Backup
+You can log in to the container and manually run the backup script using the following command:
+
+```sh
+docker exec -it $(docker ps -q -f ancestor=jannikhst/postgres-backup-ftp) /scripts/backup.sh
+```
+
+or if you know the container id:
+
+```sh
+docker exec -it ed227abb8783 /bin/sh ./backup.sh
+```
