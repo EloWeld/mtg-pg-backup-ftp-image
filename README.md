@@ -25,6 +25,7 @@ The following environment variables can be set to configure the behavior of the 
 - `FTP_HOST`: The FTP server host (required).
 - `FTP_PATH`: The FTP server path where backups will be uploaded (required).
 - `CRON_SCHEDULE`: The cron schedule string (optional, defaults to "0 2 * * *" for daily at 2 AM).
+- `FTP_SSL`: Enable FTP SSL (optional, defaults to false).
 
 ## Usage
 You can use the Docker image available at Docker Hub:
@@ -47,6 +48,7 @@ FTP_PASS=your_ftp_password
 FTP_HOST=your_ftp_host
 FTP_PATH=your_ftp_path
 # Optional: CRON_SCHEDULE="0 2 * * *"
+# Optional: FTP_SSL=true
 ```
 
 Then run the container with the following command:
@@ -95,6 +97,7 @@ services:
       FTP_HOST: ${FTP_HOST}
       FTP_PATH: ${FTP_PATH}
       CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 2 * * *"} # Default schedule: daily at 2 AM
+      FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
     volumes:
       - ./backups:/backups
     networks:
