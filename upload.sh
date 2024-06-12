@@ -25,11 +25,17 @@ echo "Starting upload of $BACKUP_FILE"
 # URL-encode the password
 ENCODED_FTP_PASS=$(urlencode "$FTP_PASS")
 
+# Check if FTP_SSL is set to "true"
+FTP_SSL_OPTION=""
+if [ "$FTP_SSL" = "true" ]; then
+  FTP_SSL_OPTION="--ftp-ssl"
+fi
+
 # Debug: Print full path with obscure password
-echo "curl -T \"$BACKUP_FILE\" \"ftp://$FTP_USER:***@$FTP_HOST/$FTP_PATH/\" --ftp-create-dirs"
+echo "curl -T \"$BACKUP_FILE\" \"ftp://$FTP_USER:***@$FTP_HOST/$FTP_PATH/\" --ftp-create-dirs $FTP_SSL_OPTION"
 
 # FTP upload
-curl -T "$BACKUP_FILE" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/" --ftp-create-dirs
+curl -T "$BACKUP_FILE" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/" --ftp-create-dirs $FTP_SSL_OPTION
 
 # Check if the upload was successful
 if [ $? -eq 0 ]; then
