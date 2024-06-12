@@ -1,13 +1,14 @@
 #!/bin/sh
 
-echo "Starting upload process..."
-
 # The backup file to be transferred
 BACKUP_FILE=$1
+echo "Starting upload of $BACKUP_FILE"
+
+# Debug: Print full path with obsure password
+echo "curl -T \"$BACKUP_FILE\" \"ftp://$FTP_USER:***@$FTP_HOST/$FTP_PATH/\" --ftp-create-dirs"
 
 # FTP upload
-echo "Uploading $BACKUP_FILE to $FTP_HOST/$FTP_PATH..."
-curl -T $BACKUP_FILE ftp://$FTP_USER:$FTP_PASS@$FTP_HOST/$FTP_PATH/ --ftp-create-dirs
+curl -T "$BACKUP_FILE" "ftp://$FTP_USER:$FTP_PASS@$FTP_HOST/$FTP_PATH/" --ftp-create-dirs
 
 # Check if the upload was successful
 if [ $? -eq 0 ]; then
