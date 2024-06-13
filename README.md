@@ -129,6 +129,8 @@ docker exec -it ed227abb8783 ./backup.sh
 
 ### Warning: Restoring a database will overwrite the existing data. Make sure you know the consequences before proceeding.
 
+Take a look at the [restore script](https://github.com/jannikhst/postgres-backup-ftp/blob/602dc1ae2c71fb0080ef77ef1e252a4c5a7b5ae7/restore.sh#L74) if you are not sure what it does.
+
 To restore the database from the latest backup file found on the ftp server, you can use the following command:
 
 ```sh
