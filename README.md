@@ -1,6 +1,6 @@
 # Postgres Backup and FTP Upload
 
-This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a FTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables.
+This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a FTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables. Manual backups can also be triggered by running the backup script inside the container. Even restoring from the latest backup is possible.
 
 - Github Repository: [jannikhst/postgres-backup-ftp](https://github.com/jannikhst/postgres-backup-ftp)
 - Docker Hub Image: [jannikhst/postgres-backup-ftp](https://hub.docker.com/r/jannikhst/postgres-backup-ftp)
@@ -121,5 +121,21 @@ docker exec -it $(docker ps -q -f ancestor=jannikhst/postgres-backup-ftp) /scrip
 or if you know the container id:
 
 ```sh
-docker exec -it ed227abb8783 /bin/sh ./backup.sh
+docker exec -it ed227abb8783 ./backup.sh
+```
+
+
+## Restore from Backup
+
+### Warning: Restoring a database will overwrite the existing data. Make sure you know the consequences before proceeding.
+
+To restore the database from the latest backup file found on the ftp server, you can use the following command:
+
+```sh
+docker exec -it $(docker ps -q -f ancestor=jannikhst/postgres-backup-ftp) /scripts/restore.sh
+```
+or if you know the container id:
+
+```sh
+docker exec -it ed227abb8783 ./restore.sh
 ```
