@@ -71,7 +71,7 @@ export PGPASSWORD=$POSTGRES_PASSWORD
 
 # Restore the backup
 echo "Restoring the backup..."
-pg_restore -U $POSTGRES_USER -h $POSTGRES_HOST -d $POSTGRES_DB -v $BACKUP_FILE
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $POSTGRES_DB -f $BACKUP_FILE
 
 # Check if the restore was successful
 if [ $? -eq 0 ]; then
