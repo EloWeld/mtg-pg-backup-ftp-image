@@ -26,6 +26,8 @@ The following environment variables can be set to configure the behavior of the 
 - `FTP_PATH`: The FTP server path where backups will be uploaded (required).
 - `CRON_SCHEDULE`: The cron schedule string (optional, defaults to "0 2 * * *" for daily at 2 AM).
 - `FTP_SSL`: Enable FTP SSL (optional, defaults to false).
+- `BACKUP_RETENTION_DAYS`: The number of days to keep backups on the FTP server (optional, defaults to 30).
+- `AUTO_DELETE_ENABLED`: Enable/disable auto deletion of old backups (optional, defaults to true).
 
 ## Usage
 You can use the Docker image available at Docker Hub:
@@ -49,6 +51,8 @@ FTP_HOST=your_ftp_host
 FTP_PATH=your_ftp_path
 # Optional: CRON_SCHEDULE="0 2 * * *"
 # Optional: FTP_SSL=true
+# Optional: BACKUP_RETENTION_DAYS=30
+# Optional: AUTO_DELETE_ENABLED=true
 ```
 
 Then run the container with the following command:
@@ -98,6 +102,8 @@ services:
       FTP_PATH: ${FTP_PATH}
       CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 2 * * *"} # Default schedule: daily at 2 AM
       FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
+      AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
     volumes:
       - ./backups:/backups
     networks:
