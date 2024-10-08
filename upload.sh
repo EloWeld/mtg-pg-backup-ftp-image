@@ -54,18 +54,39 @@ AUTO_DELETE_ENABLED="${AUTO_DELETE_ENABLED:-true}"  # Default to true
 # Delete old backups based on BACKUP_RETENTION_DAYS
 delete_old_backups() {
   echo "Checking for backups older than $BACKUP_RETENTION_DAYS days to delete..."
-  
-  # Calculate the cutoff date
-  CUTOFF_DATE=$(date -d "-$BACKUP_RETENTION_DAYS days" +%Y%m%d%H%M%S)
-  
-  # List all backups and delete those older than the cutoff date
+
+  # Calculate the cutoff date in seconds since epoch
+  CURRENT_TIMESTAMP=$(date +%s)
+  RETENTION_PERIOD_SECONDS=$(expr $BACKUP_RETENTION_DAYS \* 86400)
+  CUTOFF_TIMESTAMP=$(expr $CURRENT_TIMESTAMP - $RETENTION_PERIOD_SECONDS)
+
+  # List all backups
   BACKUPS=$(curl -s $FTP_SSL_OPTION --list-only "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/")
-  
+
   for BACKUP in $BACKUPS; do
-    BACKUP_DATE=$(echo $BACKUP | grep -oP '\d{14}')
-    if [ "$BACKUP_DATE" -lt "$CUTOFF_DATE" ]; then
+    # Extract the date string from the backup filename
+    # Assumes filename format: db_backup_YYYYMMDDHHMMSS.sql
+    BACKUP_DATE_STR=$(echo "$BACKUP" | sed -n 's/^.*_\([0-9]\{14\}\)\.sql$/\1/p')
+
+    # Skip if the filename doesn't match the expected format
+    if [ -z "$BACKUP_DATE_STR" ]; then
+      continue
+    fi
+
+    # Convert the date string to timestamp
+    # BusyBox date might not support this directly, so we use a workaround
+    # Note: This requires that the system's 'date' command supports parsing the date format
+    BACKUP_TIMESTAMP=$(date -u -D "%Y%m%d%H%M%S" "$BACKUP_DATE_STR" +%s 2>/dev/null)
+
+    # Skip if date conversion failed
+    if [ -z "$BACKUP_TIMESTAMP" ]; then
+      continue
+    fi
+
+    # Compare timestamps
+    if [ "$BACKUP_TIMESTAMP" -lt "$CUTOFF_TIMESTAMP" ]; then
       echo "Deleting old backup: $BACKUP"
-      curl -X "DELE $BACKUP" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/$BACKUP" $FTP_SSL_OPTION
+      curl -s -X "DELE $BACKUP" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/$BACKUP" $FTP_SSL_OPTION
     fi
   done
 }

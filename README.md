@@ -1,4 +1,4 @@
-# Postgres Backup and FTP Upload
+# Postgres Backup and FTP Upload with Optional Encryption
 
 This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a FTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables. Manual backups can also be triggered by running the backup script inside the container. Even restoring from the latest backup is possible.
 
@@ -11,6 +11,19 @@ This is an easy-to-use side-car container for backing up a PostgreSQL database a
 - Uploads the backup to a specified FTP server.
 - Easy configuration via environment variables.
 - Simple integration with Docker Compose.
+
+## Using Encryption
+
+To enhance the security of your backups, especially when the FTP server is not fully trusted, you can enable encryption. This will encrypt the backup file using AES-256-CBC encryption before uploading it to the FTP server.
+
+### Enabling Encryption
+
+Set the following environment variables:
+
+```sh
+ENCRYPTION_ENABLED=true
+ENCRYPTION_PASSWORD=your_encryption_password
+```
 
 ## Environment Variables
 
@@ -28,6 +41,8 @@ The following environment variables can be set to configure the behavior of the 
 - `FTP_SSL`: Enable FTP SSL (optional, defaults to false).
 - `BACKUP_RETENTION_DAYS`: The number of days to keep backups on the FTP server (optional, defaults to 30).
 - `AUTO_DELETE_ENABLED`: Enable/disable auto deletion of old backups (optional, defaults to true).
+- `ENCRYPTION_ENABLED`: Enable encryption of the backup file before uploading (optional, defaults to false).
+- `ENCRYPTION_PASSWORD`: The password used to encrypt/decrypt the backup file (required if `ENCRYPTION_ENABLED` is true).
 
 ## Usage
 You can use the Docker image available at Docker Hub:
@@ -104,6 +119,8 @@ services:
       FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
       AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
+      ENCRYPTION_ENABLED: true
+      ENCRYPTION_PASSWORD: ${ENCRYPTION_PASSWORD}
     volumes:
       - ./backups:/backups
     networks:
@@ -118,6 +135,7 @@ networks:
 The CRON_SCHEDULE environment variable allows you to specify a custom cron schedule. For example, to run the backup every day at 3 AM, set CRON_SCHEDULE to 0 3 * * *. If CRON_SCHEDULE is not set, the default schedule is daily at 2 AM (0 2 * * *).
 
 ## Manual Backup
+### Ensure that `ENCRYPTION_ENABLED` and `ENCRYPTION_PASSWORD` are set correctly in the environment variables when performing manual operations.
 You can log in to the container and manually run the backup script using the following command:
 
 ```sh

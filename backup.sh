@@ -25,5 +25,27 @@ else
   exit 1
 fi
 
+# Check if encryption is enabled
+if [ "$ENCRYPTION_ENABLED" = "true" ]; then
+  if [ -z "$ENCRYPTION_PASSWORD" ]; then
+    echo "Encryption password is not set. Please set ENCRYPTION_PASSWORD."
+    exit 1
+  fi
+
+  echo "Encrypting the backup file..."
+  openssl enc -aes-256-cbc -salt -in "$BACKUP_FILE" -out "${BACKUP_FILE}.enc" -k "$ENCRYPTION_PASSWORD"
+  
+  if [ $? -eq 0 ]; then
+    echo "Encryption successful: ${BACKUP_FILE}.enc"
+    # Remove the unencrypted backup file
+    rm "$BACKUP_FILE"
+    # Update BACKUP_FILE to point to the encrypted file
+    BACKUP_FILE="${BACKUP_FILE}.enc"
+  else
+    echo "Encryption failed"
+    exit 1
+  fi
+fi
+
 # Call the upload script
-/scripts/upload.sh $BACKUP_FILE
+/scripts/upload.sh "$BACKUP_FILE"
