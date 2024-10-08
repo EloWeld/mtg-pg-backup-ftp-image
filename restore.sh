@@ -76,7 +76,7 @@ if [ "$ENCRYPTION_ENABLED" = "true" ]; then
   echo "Decrypting the backup file..."
   DECRYPTED_BACKUP_FILE="${BACKUP_FILE%.enc}"
 
-  openssl enc -d -aes-256-cbc -in "$BACKUP_FILE" -out "$DECRYPTED_BACKUP_FILE" -k "$ENCRYPTION_PASSWORD"
+  openssl enc -d -aes-256-cbc -pbkdf2 -in "$BACKUP_FILE" -out "$DECRYPTED_BACKUP_FILE" -k "$ENCRYPTION_PASSWORD"
 
   if [ $? -eq 0 ]; then
     echo "Decryption successful: $DECRYPTED_BACKUP_FILE"

@@ -33,7 +33,7 @@ if [ "$ENCRYPTION_ENABLED" = "true" ]; then
   fi
 
   echo "Encrypting the backup file..."
-  openssl enc -aes-256-cbc -salt -in "$BACKUP_FILE" -out "${BACKUP_FILE}.enc" -k "$ENCRYPTION_PASSWORD"
+  openssl enc -aes-256-cbc -salt -pbkdf2 -in "$BACKUP_FILE" -out "${BACKUP_FILE}.enc" -k "$ENCRYPTION_PASSWORD"
   
   if [ $? -eq 0 ]; then
     echo "Encryption successful: ${BACKUP_FILE}.enc"
