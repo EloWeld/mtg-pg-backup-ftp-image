@@ -15,8 +15,8 @@ CRON_SCHEDULE="${CRON_SCHEDULE:-0 2 * * *}"
 echo "$CRON_SCHEDULE /scripts/backup.sh >> /proc/1/fd/1 2>&1" > /etc/crontabs/root
 
 echo "Cron job schedule: $CRON_SCHEDULE"
-# build the full ftp url
-echo "Will upload to ftp://${FTP_USER}:XXXXXX@${FTP_HOST}/${FTP_PATH}/   (password hidden for security)"
+# build the full sftp url
+echo "Will upload to sftp://${SFTP_USER}@${SFTP_HOST}:${SFTP_PORT:-22}${SFTP_PATH}/   (credentials hidden for security)"
 
 # Start cron in the foreground
 crond -f

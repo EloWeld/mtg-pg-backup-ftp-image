@@ -35,14 +35,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      FTP_USER: ${FTP_USER}
-      FTP_PASS: ${FTP_PASS}
-      FTP_HOST: ${FTP_HOST}
-      FTP_PATH: ${FTP_PATH}
+      SFTP_USER: ${SFTP_USER}
+      SFTP_PASSWORD: ${SFTP_PASSWORD}
+      SFTP_PRIVATE_KEY: ${SFTP_PRIVATE_KEY}
+      SFTP_HOST: ${SFTP_HOST}
+      SFTP_PORT: ${SFTP_PORT:-22}
+      SFTP_PATH: ${SFTP_PATH}
       CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 2 * * *"} # Default schedule: daily at 2 AM
-      FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
       AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
+      COMPRESSION_ENABLED: ${COMPRESSION_ENABLED:-false} # Optional: Enable compression using tar.gz
       ENCRYPTION_ENABLED: ${ENCRYPTION_ENABLED:-false}
       ENCRYPTION_PASSWORD: ${ENCRYPTION_PASSWORD}
       RUN_BACKUP_NOW: ${RUN_BACKUP_NOW:-false}

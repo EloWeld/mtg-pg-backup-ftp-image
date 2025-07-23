@@ -1,10 +1,14 @@
 FROM alpine:latest
 
-# Install required packages
-RUN apk add --no-cache postgresql-client curl openssl
+# Install required packages including openssh-client for SFTP
+RUN apk add --no-cache postgresql-client curl openssl openssh-client sshpass
 
-# Create directories for scripts and backups
-RUN mkdir -p /scripts /backups
+# Create directories for scripts, backups, and SSH configuration
+RUN mkdir -p /scripts /backups /root/.ssh
+
+# Create SSH config to disable host key checking for automated SFTP connections
+RUN echo "Host *\n    StrictHostKeyChecking no\n    UserKnownHostsFile=/dev/null" > /root/.ssh/config
+RUN chmod 600 /root/.ssh/config
 
 # Copy the scripts
 COPY backup.sh /scripts/backup.sh

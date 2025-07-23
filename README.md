@@ -1,14 +1,11 @@
-# Postgres Backup and FTP Upload with Optional Encryption and Compression
+# Postgres Backup and SFTP Upload with Optional Encryption and Compression
 
-This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a FTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables. Manual backups can also be triggered by running the backup script inside the container. Even restoring from the latest backup is possible.
-
-- Github Repository: [jannikhst/postgres-backup-ftp](https://github.com/jannikhst/postgres-backup-ftp)
-- Docker Hub Image: [jannikhst/postgres-backup-ftp](https://hub.docker.com/r/jannikhst/postgres-backup-ftp)
+This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a SFTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables. Manual backups can also be triggered by running the backup script inside the container. Even restoring from the latest backup is possible.
 
 ## Features
 
 - Backs up a PostgreSQL database daily by default, or according to a custom cron schedule.
-- Uploads the backup to a specified FTP server.
+- Uploads the backup to a specified SFTP server with SSH key or password authentication.
 - Optional compression using tar.gz format to reduce backup file size.
 - Optional encryption using AES-256-CBC for enhanced security.
 - Easy configuration via environment variables.
@@ -33,7 +30,7 @@ When compression is enabled, the backup process will:
 
 ## Using Encryption
 
-To enhance the security of your backups, especially when the FTP server is not fully trusted, you can enable encryption. This will encrypt the backup file using AES-256-CBC encryption before uploading it to the FTP server.
+To enhance the security of your backups, especially when the SFTP server is not fully trusted, you can enable encryption. This will encrypt the backup file using AES-256-CBC encryption before uploading it to the SFTP server.
 
 ### Enabling Encryption
 
@@ -48,28 +45,64 @@ ENCRYPTION_PASSWORD=your_encryption_password
 
 The following environment variables can be set to configure the behavior of the backup and upload processes:
 
+### PostgreSQL Settings
 - `POSTGRES_USER`: The PostgreSQL user (required).
 - `POSTGRES_PASSWORD`: The PostgreSQL password (required).
 - `POSTGRES_DB`: The PostgreSQL database name (required).
 - `POSTGRES_HOST`: The PostgreSQL host (required).
-- `FTP_USER`: The FTP user (required).
-- `FTP_PASS`: The FTP password (required).
-- `FTP_HOST`: The FTP server host (required).
-- `FTP_PATH`: The FTP server path where backups will be uploaded (required).
+- `POSTGRES_PORT`: The PostgreSQL port (optional, defaults to 5432).
+
+### SFTP Settings
+- `SFTP_USER`: The SFTP user (required).
+- `SFTP_PASSWORD`: The SFTP password (optional, required if SFTP_PRIVATE_KEY is not provided).
+- `SFTP_PRIVATE_KEY`: The SSH private key for SFTP authentication (optional, preferred over password).
+- `SFTP_HOST`: The SFTP server host (required).
+- `SFTP_PORT`: The SFTP server port (optional, defaults to 22).
+- `SFTP_PATH`: The SFTP server path where backups will be uploaded (required).
+
+### Backup Settings
 - `CRON_SCHEDULE`: The cron schedule string (optional, defaults to "0 2 * * *" for daily at 2 AM).
-- `FTP_SSL`: Enable FTP SSL (optional, defaults to false).
-- `BACKUP_RETENTION_DAYS`: The number of days to keep backups on the FTP server (optional, defaults to 30).
+- `BACKUP_RETENTION_DAYS`: The number of days to keep backups on the SFTP server (optional, defaults to 30).
 - `AUTO_DELETE_ENABLED`: Enable/disable auto deletion of old backups (optional, defaults to true).
 - `COMPRESSION_ENABLED`: Enable compression of the backup file using tar.gz format (optional, defaults to false).
 - `ENCRYPTION_ENABLED`: Enable encryption of the backup file before uploading (optional, defaults to false).
 - `ENCRYPTION_PASSWORD`: The password used to encrypt/decrypt the backup file (required if `ENCRYPTION_ENABLED` is true).
 - `RUN_BACKUP_NOW`: Run backup immediately and exit container instead of using cron schedule (optional, defaults to false).
 
-## Usage
-You can use the Docker image available at Docker Hub:
+## Authentication Methods
+
+### SSH Key Authentication (Recommended)
+
+For better security, use SSH key authentication:
 
 ```sh
-docker pull jannikhst/postgres-backup-ftp
+SFTP_USER=your_sftp_user
+SFTP_PRIVATE_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+your_private_key_content_here
+-----END OPENSSH PRIVATE KEY-----"
+SFTP_HOST=your_sftp_host
+SFTP_PATH=/path/to/backups
+```
+
+### Password Authentication
+
+Alternatively, you can use password authentication:
+
+```sh
+SFTP_USER=your_sftp_user
+SFTP_PASSWORD=your_sftp_password
+SFTP_HOST=your_sftp_host
+SFTP_PATH=/path/to/backups
+```
+
+## Usage
+
+### Building the Container
+
+Build the Docker container:
+
+```sh
+docker build -t postgres-backup-sftp .
 ```
 
 ### Running the Container
@@ -81,13 +114,18 @@ POSTGRES_USER=your_postgres_user
 POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
 POSTGRES_HOST=your_postgres_host
-# Optional: POSTGRES_PORT=6432
-FTP_USER=your_ftp_user
-FTP_PASS=your_ftp_password
-FTP_HOST=your_ftp_host
-FTP_PATH=your_ftp_path
+# Optional: POSTGRES_PORT=5432
+SFTP_USER=your_sftp_user
+# Either use password or private key authentication:
+SFTP_PASSWORD=your_sftp_password
+# OR
+SFTP_PRIVATE_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+your_private_key_content
+-----END OPENSSH PRIVATE KEY-----"
+SFTP_HOST=your_sftp_host
+SFTP_PORT=22
+SFTP_PATH=/path/to/backups
 # Optional: CRON_SCHEDULE="0 2 * * *"
-# Optional: FTP_SSL=true
 # Optional: BACKUP_RETENTION_DAYS=30
 # Optional: AUTO_DELETE_ENABLED=true
 # Optional: COMPRESSION_ENABLED=true
@@ -97,7 +135,7 @@ FTP_PATH=your_ftp_path
 Then run the container with the following command:
 
 ```sh
-docker run --env-file ./env.list jannikhst/postgres-backup-ftp
+docker run --env-file ./env.list postgres-backup-sftp
 ```
 
 ### Using Docker Compose
@@ -125,8 +163,10 @@ services:
       - internal_network
 
   backup:
-    image: jannikhst/postgres-backup-ftp
-    container_name: postgres_backup
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: postgres_backup_sftp
     depends_on:
       db:
         condition: service_healthy
@@ -136,12 +176,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: db
       POSTGRES_PORT: ${POSTGRES_PORT:-5432} # Optional: Custom port
-      FTP_USER: ${FTP_USER}
-      FTP_PASS: ${FTP_PASS}
-      FTP_HOST: ${FTP_HOST}
-      FTP_PATH: ${FTP_PATH}
+      SFTP_USER: ${SFTP_USER}
+      SFTP_PASSWORD: ${SFTP_PASSWORD}
+      SFTP_PRIVATE_KEY: ${SFTP_PRIVATE_KEY}
+      SFTP_HOST: ${SFTP_HOST}
+      SFTP_PORT: ${SFTP_PORT:-22}
+      SFTP_PATH: ${SFTP_PATH}
       CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 2 * * *"} # Default schedule: daily at 2 AM
-      FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
       AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
       COMPRESSION_ENABLED: ${COMPRESSION_ENABLED:-false} # Optional: Enable compression using tar.gz
@@ -167,7 +208,7 @@ The CRON_SCHEDULE environment variable allows you to specify a custom cron sched
 To run a one-time backup immediately, you can set the `RUN_BACKUP_NOW` environment variable:
 
 ```sh
-docker run --env-file ./env.list -e RUN_BACKUP_NOW=true jannikhst/postgres-backup-ftp
+docker run --env-file ./env.list -e RUN_BACKUP_NOW=true postgres-backup-sftp
 ```
 
 This will run the backup once and exit the container.
@@ -177,7 +218,7 @@ This will run the backup once and exit the container.
 You can log in to the container and manually run the backup script using the following command:
 
 ```sh
-docker exec -it $(docker ps -q -f ancestor=jannikhst/postgres-backup-ftp) /scripts/backup.sh
+docker exec -it $(docker ps -q -f ancestor=postgres-backup-sftp) /scripts/backup.sh
 ```
 
 or if you know the container id:
@@ -186,20 +227,52 @@ or if you know the container id:
 docker exec -it ed227abb8783 ./backup.sh
 ```
 
-
 ## Restore from Backup
 
 ### Warning: Restoring a database will overwrite the existing data. Make sure you know the consequences before proceeding.
 
-Take a look at the [restore script](https://github.com/jannikhst/postgres-backup-ftp/blob/main/restore.sh#L74) if you are not sure what it does.
+Take a look at the [restore script](./restore.sh) if you are not sure what it does.
 
-To restore the database from the latest backup file found on the ftp server, you can use the following command:
+To restore the database from the latest backup file found on the SFTP server, you can use the following command:
 
 ```sh
-docker exec -it $(docker ps -q -f ancestor=jannikhst/postgres-backup-ftp) /scripts/restore.sh
+docker exec -it $(docker ps -q -f ancestor=postgres-backup-sftp) /scripts/restore.sh
 ```
 or if you know the container id:
 
 ```sh
 docker exec -it ed227abb8783 ./restore.sh
 ```
+
+## Security Considerations
+
+- **SSH Key Authentication**: Always prefer SSH key authentication over password authentication for better security.
+- **Private Key Protection**: Store your SSH private keys securely and never commit them to version control.
+- **Network Security**: Consider using VPN or other secure network connections when accessing remote SFTP servers.
+- **Encryption**: Enable backup encryption when storing sensitive data on external servers.
+- **Access Control**: Configure appropriate file permissions and user access on your SFTP server.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **SSH Connection Refused**: Check if the SFTP server is running and accessible on the specified port.
+2. **Authentication Failed**: Verify your credentials, SSH keys, and user permissions.
+3. **Permission Denied**: Ensure the SFTP user has write permissions to the specified path.
+4. **Host Key Verification**: The container is configured to skip host key verification for automated operations.
+
+### Debug Mode
+
+To enable verbose output for debugging SFTP connections, you can modify the scripts to add `-v` flag to SFTP commands.
+
+## Migration from FTP Version
+
+If you're migrating from the FTP version of this container, update your environment variables:
+
+- `FTP_USER` → `SFTP_USER`
+- `FTP_PASS` → `SFTP_PASSWORD`
+- `FTP_HOST` → `SFTP_HOST`
+- `FTP_PATH` → `SFTP_PATH`
+- `FTP_SSL` → (removed, SFTP uses SSH encryption by default)
+- Add `SFTP_PORT` (defaults to 22)
+- Add `SFTP_PRIVATE_KEY` (optional, for SSH key authentication)

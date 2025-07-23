@@ -7,42 +7,57 @@ BACKUP_DIR="/downloaded-backups"
 
 # Set default port if not specified
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+SFTP_PORT="${SFTP_PORT:-22}"
 
-# Funktion zum URL-Encodieren
-urlencode() {
-  local input="$1"
-  local output=""
-  local i
-  local c
-
-  for i in $(seq 0 $((${#input} - 1))); do
-    c=$(printf "%s" "${input:$i:1}")
-    case "$c" in
-      [a-zA-Z0-9.~_-]) output="$output$c" ;;
-      *) output="$output$(printf '%%%02X' "'$c")" ;;
-    esac
-  done
-
-  echo "$output"
+# Function to create SFTP batch commands file
+create_sftp_batch() {
+  local batch_file="$1"
+  local command="$2"
+  
+  cat > "$batch_file" << EOF
+$command
+quit
+EOF
 }
 
-# Aufbau der FTP-URL
-ENCODED_FTP_USER=$(urlencode "$FTP_USER")
-ENCODED_FTP_PASS=$(urlencode "$FTP_PASS")
-ENCODED_FTP_HOST=$(urlencode "$FTP_HOST")
+# Create temporary directory for SFTP batch files
+TEMP_DIR="/tmp/sftp_restore_$$"
+mkdir -p "$TEMP_DIR"
 
-FTP_URL="ftp://$ENCODED_FTP_USER:$ENCODED_FTP_PASS@$ENCODED_FTP_HOST/$FTP_PATH/"
-
-echo "Will attempt download from: $FTP_URL"
-
-# Überprüfung, ob FTP_SSL auf "true" gesetzt ist
-FTP_SSL_OPTION=""
-if [ "$FTP_SSL" = "true" ]; then
-  FTP_SSL_OPTION="--ftp-ssl"
+# Setup SFTP connection options
+SFTP_OPTIONS=""
+if [ -n "$SFTP_PRIVATE_KEY" ]; then
+  # If private key is provided, save it to a file
+  echo "$SFTP_PRIVATE_KEY" > "$TEMP_DIR/private_key"
+  chmod 600 "$TEMP_DIR/private_key"
+  SFTP_OPTIONS="-i $TEMP_DIR/private_key"
+  SFTP_CMD="sftp"
+elif [ -n "$SFTP_PASSWORD" ]; then
+  # For password authentication, use sshpass
+  SFTP_CMD="sshpass -p '$SFTP_PASSWORD' sftp"
+else
+  SFTP_CMD="sftp"
 fi
 
+echo "Will attempt download from: $SFTP_USER@$SFTP_HOST:$SFTP_PATH/"
+
+# Create batch file for listing files
+LIST_BATCH="$TEMP_DIR/list_batch"
+create_sftp_batch "$LIST_BATCH" "ls \"$SFTP_PATH/\""
+
 # Liste der Backups abrufen und das neueste auswählen
-LATEST_BACKUP=$(curl -s $FTP_SSL_OPTION --list-only "$FTP_URL" | sort | tail -n 1)
+BACKUPS_LIST="$TEMP_DIR/backups_list"
+$SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$LIST_BATCH" "$SFTP_USER@$SFTP_HOST" > "$BACKUPS_LIST" 2>/dev/null
+
+# Extract and sort backup filenames
+LATEST_BACKUP=$(grep "^db_backup_" "$BACKUPS_LIST" 2>/dev/null | awk '{print $NF}' | grep "^db_backup_" | sort | tail -n 1)
+
+if [ -z "$LATEST_BACKUP" ]; then
+  echo "No backups found on the SFTP server."
+  rm -rf "$TEMP_DIR"
+  exit 1
+fi
+
 BACKUP_FILE="$BACKUP_DIR/$LATEST_BACKUP"
 
 # Bestätigung vom Benutzer einholen
@@ -51,21 +66,27 @@ read -p "Do you want to restore this backup? WARNING: This will DROP and RECREAT
 
 if [ "$CONFIRMATION" != "yes" ]; then
   echo "Restore cancelled."
+  rm -rf "$TEMP_DIR"
   exit 0
 fi
 
 # Sicherstellen, dass das Backup-Verzeichnis existiert
 mkdir -p $BACKUP_DIR
 
+# Create batch file for download
+DOWNLOAD_BATCH="$TEMP_DIR/download_batch"
+create_sftp_batch "$DOWNLOAD_BATCH" "get \"$SFTP_PATH/$LATEST_BACKUP\" \"$BACKUP_FILE\""
+
 # Neuestes Backup herunterladen
 echo "Downloading the latest backup: $LATEST_BACKUP"
-curl -o "$BACKUP_FILE" "$FTP_URL$LATEST_BACKUP" $FTP_SSL_OPTION
+$SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$DOWNLOAD_BATCH" "$SFTP_USER@$SFTP_HOST"
 
 # Überprüfen, ob der Download erfolgreich war
-if [ $? -eq 0 ]; then
+if [ $? -eq 0 ] && [ -f "$BACKUP_FILE" ]; then
   echo "Download successful: $BACKUP_FILE"
 else
   echo "Download failed"
+  rm -rf "$TEMP_DIR"
   exit 1
 fi
 
@@ -73,6 +94,7 @@ fi
 if [ "$ENCRYPTION_ENABLED" = "true" ]; then
   if [ -z "$ENCRYPTION_PASSWORD" ]; then
     echo "Encryption password is not set. Please set ENCRYPTION_PASSWORD."
+    rm -rf "$TEMP_DIR"
     exit 1
   fi
 
@@ -87,6 +109,7 @@ if [ "$ENCRYPTION_ENABLED" = "true" ]; then
     BACKUP_FILE="$DECRYPTED_BACKUP_FILE"
   else
     echo "Decryption failed"
+    rm -rf "$TEMP_DIR"
     exit 1
   fi
 fi
@@ -109,10 +132,12 @@ if echo "$BACKUP_FILE" | grep -q "\.tar\.gz$"; then
       echo "Found SQL file: $BACKUP_FILE"
     else
       echo "No SQL file found in the archive"
+      rm -rf "$TEMP_DIR"
       exit 1
     fi
   else
     echo "Decompression failed"
+    rm -rf "$TEMP_DIR"
     exit 1
   fi
 fi
@@ -127,12 +152,14 @@ echo "Connecting to: $POSTGRES_HOST:$POSTGRES_PORT as $POSTGRES_USER"
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "DROP DATABASE $POSTGRES_DB;"
 if [ $? -ne 0 ]; then
   echo "Failed to drop the database."
+  rm -rf "$TEMP_DIR"
   exit 1
 fi
 
 psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "CREATE DATABASE $POSTGRES_DB WITH OWNER $POSTGRES_USER;"
 if [ $? -ne 0 ]; then
   echo "Failed to create the database."
+  rm -rf "$TEMP_DIR"
   exit 1
 fi
 
@@ -147,5 +174,9 @@ if [ $? -eq 0 ]; then
   echo "Restore successful"
 else
   echo "Restore failed"
+  rm -rf "$TEMP_DIR"
   exit 1
 fi
+
+# Cleanup temporary files
+rm -rf "$TEMP_DIR"

@@ -1,47 +1,101 @@
 #!/bin/sh
 
-# Function to URL-encode input
-urlencode() {
-  local input="$1"
-  local output=""
-  local i
-  local c
+# Function to create SFTP batch commands file
+create_sftp_batch() {
+  local batch_file="$1"
+  local remote_file="$2"
+  local local_file="$3"
+  
+  cat > "$batch_file" << EOF
+put "$local_file" "$SFTP_PATH/$remote_file"
+quit
+EOF
+}
 
-  for i in $(seq 0 $((${#input} - 1))); do
-    c=$(printf "%s" "${input:$i:1}")
-    case "$c" in
-      [a-zA-Z0-9.~_-]) output="$output$c" ;;
-      *) output="$output$(printf '%%%02X' "'$c")" ;;
-    esac
-  done
+# Function to create SFTP delete batch commands
+create_delete_batch() {
+  local batch_file="$1"
+  local file_to_delete="$2"
+  
+  cat > "$batch_file" << EOF
+rm "$SFTP_PATH/$file_to_delete"
+quit
+EOF
+}
 
-  echo "$output"
+# Function to create SFTP list batch commands
+create_list_batch() {
+  local batch_file="$1"
+  
+  cat > "$batch_file" << EOF
+ls "$SFTP_PATH/"
+quit
+EOF
 }
 
 # The backup file to be transferred
 BACKUP_FILE=$1
-echo "Starting upload of $BACKUP_FILE"
+echo "Starting SFTP upload of $BACKUP_FILE"
 
-# URL-encode the password
-ENCODED_FTP_PASS=$(urlencode "$FTP_PASS")
+# Extract filename from full path
+BACKUP_FILENAME=$(basename "$BACKUP_FILE")
 
-# Check if FTP_SSL is set to "true"
-FTP_SSL_OPTION=""
-if [ "$FTP_SSL" = "true" ]; then
-  FTP_SSL_OPTION="--ftp-ssl"
+# Set default port if not specified
+SFTP_PORT="${SFTP_PORT:-22}"
+
+# Create temporary directory for SFTP batch files
+TEMP_DIR="/tmp/sftp_$$"
+mkdir -p "$TEMP_DIR"
+
+# Setup SFTP connection options
+SFTP_OPTIONS=""
+if [ -n "$SFTP_PRIVATE_KEY" ]; then
+  # If private key is provided, save it to a file
+  echo "$SFTP_PRIVATE_KEY" > "$TEMP_DIR/private_key"
+  chmod 600 "$TEMP_DIR/private_key"
+  SFTP_OPTIONS="-i $TEMP_DIR/private_key"
+elif [ -n "$SFTP_PASSWORD" ]; then
+  # For password authentication, we'll use sshpass if available
+  if command -v sshpass >/dev/null 2>&1; then
+    SFTP_CMD="sshpass -p '$SFTP_PASSWORD' sftp"
+  else
+    echo "Warning: sshpass not available and no private key provided. You may need to enter password manually."
+    SFTP_CMD="sftp"
+  fi
+else
+  SFTP_CMD="sftp"
 fi
 
-# Debug: Print full path with obscure password
-echo "curl -T \"$BACKUP_FILE\" \"ftp://$FTP_USER:***@$FTP_HOST/$FTP_PATH/\" --ftp-create-dirs $FTP_SSL_OPTION"
+# Set default SFTP command if not set above
+SFTP_CMD="${SFTP_CMD:-sftp}"
 
-# FTP upload
-curl -T "$BACKUP_FILE" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/" --ftp-create-dirs $FTP_SSL_OPTION
+# Create batch file for upload
+UPLOAD_BATCH="$TEMP_DIR/upload_batch"
+create_sftp_batch "$UPLOAD_BATCH" "$BACKUP_FILENAME" "$BACKUP_FILE"
+
+# Debug: Print connection info (hide sensitive data)
+echo "$SFTP_CMD $SFTP_OPTIONS -P $SFTP_PORT -b \"$UPLOAD_BATCH\" $SFTP_USER@$SFTP_HOST"
+
+# Create remote directory if it doesn't exist
+MKDIR_BATCH="$TEMP_DIR/mkdir_batch"
+cat > "$MKDIR_BATCH" << EOF
+mkdir "$SFTP_PATH"
+quit
+EOF
+
+# Try to create directory (ignore errors if it already exists)
+$SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$MKDIR_BATCH" "$SFTP_USER@$SFTP_HOST" 2>/dev/null
+
+# SFTP upload
+$SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$UPLOAD_BATCH" "$SFTP_USER@$SFTP_HOST"
 
 # Check if the upload was successful
 if [ $? -eq 0 ]; then
   echo "Upload successful: $BACKUP_FILE"
 else
   echo "Upload failed"
+  # Cleanup temp files
+  rm -rf "$TEMP_DIR"
   exit 1
 fi
 
@@ -60,8 +114,16 @@ delete_old_backups() {
   RETENTION_PERIOD_SECONDS=$(expr $BACKUP_RETENTION_DAYS \* 86400)
   CUTOFF_TIMESTAMP=$(expr $CURRENT_TIMESTAMP - $RETENTION_PERIOD_SECONDS)
 
-  # List all backups
-  BACKUPS=$(curl -s $FTP_SSL_OPTION --list-only "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/")
+  # Create batch file for listing
+  LIST_BATCH="$TEMP_DIR/list_batch"
+  create_list_batch "$LIST_BATCH"
+
+  # List all backups via SFTP
+  BACKUPS_LIST="$TEMP_DIR/backups_list"
+  $SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$LIST_BATCH" "$SFTP_USER@$SFTP_HOST" > "$BACKUPS_LIST" 2>/dev/null
+
+  # Parse the output and extract filenames
+  BACKUPS=$(grep "^db_backup_" "$BACKUPS_LIST" 2>/dev/null | awk '{print $NF}' | grep "^db_backup_")
 
   for BACKUP in $BACKUPS; do
     # Extract the date string from the backup filename
@@ -74,11 +136,24 @@ delete_old_backups() {
     fi
 
     # Convert the date string to timestamp
-    # BusyBox date might not support this directly, so we use a workaround
-    # Note: This requires that the system's 'date' command supports parsing the date format
-    BACKUP_TIMESTAMP=$(date -u -D "%Y%m%d%H%M%S" "$BACKUP_DATE_STR" +%s 2>/dev/null)
+    # Extract components: YYYYMMDDHHMMSS
+    YEAR=$(echo "$BACKUP_DATE_STR" | cut -c1-4)
+    MONTH=$(echo "$BACKUP_DATE_STR" | cut -c5-6)
+    DAY=$(echo "$BACKUP_DATE_STR" | cut -c7-8)
+    HOUR=$(echo "$BACKUP_DATE_STR" | cut -c9-10)
+    MIN=$(echo "$BACKUP_DATE_STR" | cut -c11-12)
+    SEC=$(echo "$BACKUP_DATE_STR" | cut -c13-14)
+    
+    # Create a date string that 'date' can understand
+    DATE_STR="$YEAR-$MONTH-$DAY $HOUR:$MIN:$SEC"
+    BACKUP_TIMESTAMP=$(date -d "$DATE_STR" +%s 2>/dev/null)
 
-    # Skip if date conversion failed
+    # Skip if date conversion failed (try alternative format for different systems)
+    if [ -z "$BACKUP_TIMESTAMP" ]; then
+      BACKUP_TIMESTAMP=$(date -j -f "%Y-%m-%d %H:%M:%S" "$DATE_STR" +%s 2>/dev/null)
+    fi
+
+    # Skip if date conversion still failed
     if [ -z "$BACKUP_TIMESTAMP" ]; then
       continue
     fi
@@ -86,7 +161,9 @@ delete_old_backups() {
     # Compare timestamps
     if [ "$BACKUP_TIMESTAMP" -lt "$CUTOFF_TIMESTAMP" ]; then
       echo "Deleting old backup: $BACKUP"
-      curl -s -X "DELE $BACKUP" "ftp://$FTP_USER:$ENCODED_FTP_PASS@$FTP_HOST/$FTP_PATH/$BACKUP" $FTP_SSL_OPTION
+      DELETE_BATCH="$TEMP_DIR/delete_$BACKUP"
+      create_delete_batch "$DELETE_BATCH" "$BACKUP"
+      $SFTP_CMD $SFTP_OPTIONS -P "$SFTP_PORT" -b "$DELETE_BATCH" "$SFTP_USER@$SFTP_HOST" 2>/dev/null
     fi
   done
 }
@@ -97,3 +174,6 @@ if [ "$AUTO_DELETE_ENABLED" = "true" ]; then
 else
   echo "Automatic deletion is disabled."
 fi
+
+# Cleanup temporary files
+rm -rf "$TEMP_DIR"
