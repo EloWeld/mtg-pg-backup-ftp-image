@@ -7,19 +7,26 @@ BACKUP_DIR="/backups"
 TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.sql"
 
-# Set default port if not specified
-POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-
 # Ensure the backup directory exists
 mkdir -p $BACKUP_DIR
 
 # Set the environment variables for the database connection
 export PGPASSWORD=$POSTGRES_PASSWORD
 
+# Prepare pg_dump command with optional port parameter
+PG_DUMP_CMD="pg_dump -U $POSTGRES_USER -h $POSTGRES_HOST"
+if [ -n "$POSTGRES_PORT" ]; then
+  PG_DUMP_CMD="$PG_DUMP_CMD -p $POSTGRES_PORT"
+  CONNECT_INFO="$POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB"
+else
+  CONNECT_INFO="$POSTGRES_HOST/$POSTGRES_DB"
+fi
+PG_DUMP_CMD="$PG_DUMP_CMD -F p -b -v -f $BACKUP_FILE $POSTGRES_DB"
+
 # Perform the backup
 echo "Creating backup file..."
-echo "Connecting to: $POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB as $POSTGRES_USER"
-pg_dump -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -F p -b -v -f $BACKUP_FILE $POSTGRES_DB
+echo "Connecting to: $CONNECT_INFO as $POSTGRES_USER"
+$PG_DUMP_CMD
 
 # Check if the backup was successful
 if [ $? -eq 0 ]; then

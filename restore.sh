@@ -5,8 +5,7 @@ echo "Starting restore process..."
 # Variablen
 BACKUP_DIR="/downloaded-backups"
 
-# Set default port if not specified
-POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+# Port parameter will be added only if POSTGRES_PORT is specified
 
 # Funktion zum URL-Encodieren
 urlencode() {
@@ -120,17 +119,26 @@ fi
 # Setze die Umgebungsvariable für die Datenbankverbindung
 export PGPASSWORD=$POSTGRES_PASSWORD
 
+# Prepare psql command with optional port parameter
+PSQL_CMD_BASE="psql -U $POSTGRES_USER -h $POSTGRES_HOST"
+if [ -n "$POSTGRES_PORT" ]; then
+  PSQL_CMD_BASE="$PSQL_CMD_BASE -p $POSTGRES_PORT"
+  CONNECT_INFO="$POSTGRES_HOST:$POSTGRES_PORT"
+else
+  CONNECT_INFO="$POSTGRES_HOST"
+fi
+
 # Die Datenbank droppen und neu erstellen
 echo "Dropping and recreating the database..."
-echo "Connecting to: $POSTGRES_HOST:$POSTGRES_PORT as $POSTGRES_USER"
+echo "Connecting to: $CONNECT_INFO as $POSTGRES_USER"
 
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "DROP DATABASE $POSTGRES_DB;"
+$PSQL_CMD_BASE -d postgres -c "DROP DATABASE $POSTGRES_DB;"
 if [ $? -ne 0 ]; then
   echo "Failed to drop the database."
   exit 1
 fi
 
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "CREATE DATABASE $POSTGRES_DB WITH OWNER $POSTGRES_USER;"
+$PSQL_CMD_BASE -d postgres -c "CREATE DATABASE $POSTGRES_DB WITH OWNER $POSTGRES_USER;"
 if [ $? -ne 0 ]; then
   echo "Failed to create the database."
   exit 1
@@ -140,7 +148,7 @@ echo "Database dropped and recreated successfully."
 
 # Backup wiederherstellen
 echo "Restoring the backup..."
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d $POSTGRES_DB -f "$BACKUP_FILE"
+$PSQL_CMD_BASE -d $POSTGRES_DB -f "$BACKUP_FILE"
 
 # Überprüfen, ob die Wiederherstellung erfolgreich war
 if [ $? -eq 0 ]; then

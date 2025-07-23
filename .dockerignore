@@ -1,1 +1,14 @@
 *.log
+.env
+.env.*
+env.list
+*.env
+.DS_Store
+.git
+.gitignore
+README.md
+compose-example.yml
+docker-compose.yml
+build_push.sh
+backups/
+db_data/

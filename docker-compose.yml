@@ -21,11 +21,12 @@ services:
     networks:
       - internal_network
 
-  backup:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: backup_service
+  backup2:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: weloxd/mtg-postgres-backup-ftp:latest
+    container_name: backup_service_2
     depends_on:
       db:
         condition: service_healthy
