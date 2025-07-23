@@ -65,8 +65,8 @@ delete_old_backups() {
 
   for BACKUP in $BACKUPS; do
     # Extract the date string from the backup filename
-    # Assumes filename format: db_backup_YYYYMMDDHHMMSS.sql
-    BACKUP_DATE_STR=$(echo "$BACKUP" | sed -n 's/^.*_\([0-9]\{14\}\)\.sql$/\1/p')
+    # Supports multiple formats: db_backup_YYYYMMDDHHMMSS.sql, db_backup_YYYYMMDDHHMMSS.sql.tar.gz, db_backup_YYYYMMDDHHMMSS.sql.tar.gz.enc, etc.
+    BACKUP_DATE_STR=$(echo "$BACKUP" | sed -n 's/^.*db_backup_\([0-9]\{14\}\)\..*$/\1/p')
 
     # Skip if the filename doesn't match the expected format
     if [ -z "$BACKUP_DATE_STR" ]; then

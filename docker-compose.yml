@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: postgres_db
+    restart: always
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1",
+        ]
+      interval: 20s
+      timeout: 7s
+      retries: 3
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+    networks:
+      - internal_network
+
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backup_service
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      FTP_USER: ${FTP_USER}
+      FTP_PASS: ${FTP_PASS}
+      FTP_HOST: ${FTP_HOST}
+      FTP_PATH: ${FTP_PATH}
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-"0 2 * * *"} # Default schedule: daily at 2 AM
+      FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
+      AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
+      ENCRYPTION_ENABLED: ${ENCRYPTION_ENABLED:-false}
+      ENCRYPTION_PASSWORD: ${ENCRYPTION_PASSWORD}
+      RUN_BACKUP_NOW: ${RUN_BACKUP_NOW:-false}
+    volumes:
+      - ./backups:/backups
+    networks:
+      - internal_network
+
+networks:
+  internal_network:
+    driver: bridge

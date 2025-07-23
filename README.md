@@ -1,4 +1,4 @@
-# Postgres Backup and FTP Upload with Optional Encryption
+# Postgres Backup and FTP Upload with Optional Encryption and Compression
 
 This is an easy-to-use side-car container for backing up a PostgreSQL database and uploading the backup to a FTP server. The container is designed to run as a cron job, with configurable schedules and connection details provided via environment variables. Manual backups can also be triggered by running the backup script inside the container. Even restoring from the latest backup is possible.
 
@@ -9,8 +9,27 @@ This is an easy-to-use side-car container for backing up a PostgreSQL database a
 
 - Backs up a PostgreSQL database daily by default, or according to a custom cron schedule.
 - Uploads the backup to a specified FTP server.
+- Optional compression using tar.gz format to reduce backup file size.
+- Optional encryption using AES-256-CBC for enhanced security.
 - Easy configuration via environment variables.
 - Simple integration with Docker Compose.
+
+## Using Compression
+
+To reduce the size of backup files, you can enable compression. This will compress the SQL dump using tar.gz format before upload.
+
+### Enabling Compression
+
+Set the following environment variable:
+
+```sh
+COMPRESSION_ENABLED=true
+```
+
+When compression is enabled, the backup process will:
+1. Create the SQL dump file
+2. Compress it using tar.gz format
+3. Optionally encrypt the compressed file if encryption is also enabled
 
 ## Using Encryption
 
@@ -41,8 +60,10 @@ The following environment variables can be set to configure the behavior of the 
 - `FTP_SSL`: Enable FTP SSL (optional, defaults to false).
 - `BACKUP_RETENTION_DAYS`: The number of days to keep backups on the FTP server (optional, defaults to 30).
 - `AUTO_DELETE_ENABLED`: Enable/disable auto deletion of old backups (optional, defaults to true).
+- `COMPRESSION_ENABLED`: Enable compression of the backup file using tar.gz format (optional, defaults to false).
 - `ENCRYPTION_ENABLED`: Enable encryption of the backup file before uploading (optional, defaults to false).
 - `ENCRYPTION_PASSWORD`: The password used to encrypt/decrypt the backup file (required if `ENCRYPTION_ENABLED` is true).
+- `RUN_BACKUP_NOW`: Run backup immediately and exit container instead of using cron schedule (optional, defaults to false).
 
 ## Usage
 You can use the Docker image available at Docker Hub:
@@ -60,6 +81,7 @@ POSTGRES_USER=your_postgres_user
 POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
 POSTGRES_HOST=your_postgres_host
+# Optional: POSTGRES_PORT=6432
 FTP_USER=your_ftp_user
 FTP_PASS=your_ftp_password
 FTP_HOST=your_ftp_host
@@ -68,6 +90,8 @@ FTP_PATH=your_ftp_path
 # Optional: FTP_SSL=true
 # Optional: BACKUP_RETENTION_DAYS=30
 # Optional: AUTO_DELETE_ENABLED=true
+# Optional: COMPRESSION_ENABLED=true
+# Optional: RUN_BACKUP_NOW=true
 ```
 
 Then run the container with the following command:
@@ -111,6 +135,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: db
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432} # Optional: Custom port
       FTP_USER: ${FTP_USER}
       FTP_PASS: ${FTP_PASS}
       FTP_HOST: ${FTP_HOST}
@@ -119,6 +144,8 @@ services:
       FTP_SSL: ${FTP_SSL} # Optional: Enable FTP SSL
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30} # Optional: Number of days to keep backups
       AUTO_DELETE_ENABLED: ${AUTO_DELETE_ENABLED:-true} # Optional: Enable/disable auto deletion of old backups
+      COMPRESSION_ENABLED: ${COMPRESSION_ENABLED:-false} # Optional: Enable compression using tar.gz
+      # RUN_BACKUP_NOW: true # Optional: Uncomment to run backup immediately and exit
       ENCRYPTION_ENABLED: true
       ENCRYPTION_PASSWORD: ${ENCRYPTION_PASSWORD}
     volumes:
@@ -135,6 +162,17 @@ networks:
 The CRON_SCHEDULE environment variable allows you to specify a custom cron schedule. For example, to run the backup every day at 3 AM, set CRON_SCHEDULE to 0 3 * * *. If CRON_SCHEDULE is not set, the default schedule is daily at 2 AM (0 2 * * *).
 
 ## Manual Backup
+
+### Option 1: Immediate Backup
+To run a one-time backup immediately, you can set the `RUN_BACKUP_NOW` environment variable:
+
+```sh
+docker run --env-file ./env.list -e RUN_BACKUP_NOW=true jannikhst/postgres-backup-ftp
+```
+
+This will run the backup once and exit the container.
+
+### Option 2: Manual Execution Inside Running Container
 ### Ensure that `ENCRYPTION_ENABLED` and `ENCRYPTION_PASSWORD` are set correctly in the environment variables when performing manual operations.
 You can log in to the container and manually run the backup script using the following command:
 

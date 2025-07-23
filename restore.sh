@@ -5,6 +5,9 @@ echo "Starting restore process..."
 # Variablen
 BACKUP_DIR="/downloaded-backups"
 
+# Set default port if not specified
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+
 # Funktion zum URL-Encodieren
 urlencode() {
   local input="$1"
@@ -88,19 +91,46 @@ if [ "$ENCRYPTION_ENABLED" = "true" ]; then
   fi
 fi
 
+# Check if the backup file is compressed (tar.gz)
+if echo "$BACKUP_FILE" | grep -q "\.tar\.gz$"; then
+  echo "Decompressing the backup file..."
+  DECOMPRESSED_DIR="$BACKUP_DIR/extracted"
+  mkdir -p "$DECOMPRESSED_DIR"
+  
+  # Extract tar.gz file
+  tar -xzf "$BACKUP_FILE" -C "$DECOMPRESSED_DIR"
+  
+  if [ $? -eq 0 ]; then
+    echo "Decompression successful"
+    # Find the SQL file in the extracted directory
+    SQL_FILE=$(find "$DECOMPRESSED_DIR" -name "*.sql" | head -n 1)
+    if [ -n "$SQL_FILE" ]; then
+      BACKUP_FILE="$SQL_FILE"
+      echo "Found SQL file: $BACKUP_FILE"
+    else
+      echo "No SQL file found in the archive"
+      exit 1
+    fi
+  else
+    echo "Decompression failed"
+    exit 1
+  fi
+fi
+
 # Setze die Umgebungsvariable für die Datenbankverbindung
 export PGPASSWORD=$POSTGRES_PASSWORD
 
 # Die Datenbank droppen und neu erstellen
 echo "Dropping and recreating the database..."
+echo "Connecting to: $POSTGRES_HOST:$POSTGRES_PORT as $POSTGRES_USER"
 
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d postgres -c "DROP DATABASE $POSTGRES_DB;"
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "DROP DATABASE $POSTGRES_DB;"
 if [ $? -ne 0 ]; then
   echo "Failed to drop the database."
   exit 1
 fi
 
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d postgres -c "CREATE DATABASE $POSTGRES_DB WITH OWNER $POSTGRES_USER;"
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d postgres -c "CREATE DATABASE $POSTGRES_DB WITH OWNER $POSTGRES_USER;"
 if [ $? -ne 0 ]; then
   echo "Failed to create the database."
   exit 1
@@ -110,7 +140,7 @@ echo "Database dropped and recreated successfully."
 
 # Backup wiederherstellen
 echo "Restoring the backup..."
-psql -U $POSTGRES_USER -h $POSTGRES_HOST -d $POSTGRES_DB -f "$BACKUP_FILE"
+psql -U $POSTGRES_USER -h $POSTGRES_HOST -p $POSTGRES_PORT -d $POSTGRES_DB -f "$BACKUP_FILE"
 
 # Überprüfen, ob die Wiederherstellung erfolgreich war
 if [ $? -eq 0 ]; then
